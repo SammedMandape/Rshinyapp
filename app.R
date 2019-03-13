@@ -120,12 +120,14 @@ server <- function(input, output) {
   #######################
   ## Plot tab: Stringdb plot for input gene set
   #######################
+  # reactive event to plot survival and network when user hits submit button
   subset_dataset <- eventReactive(input$submit,
                                   {data.frame(genes = unlist(strsplit(input$title1,split='[\r\n]')))
                                   })
   string_db <- STRINGdb$new(version="10", species=9606, input_directory="./")
   output$stringplot <- renderPlot({
     req(subset_dataset())
+    #took it from below and wrote it outside loop so that the stringdb local copy is downloaded only once. 
     #string_db <- STRINGdb$new()
     mapped_genes <- string_db$map(subset_dataset(),"genes",removeUnmappedRows = TRUE)
     hits_2<-mapped_genes$STRING_id
@@ -183,13 +185,13 @@ server <- function(input, output) {
     hgnc2ensembl <- getBM(filters = "hgnc_symbol",attributes = c("hgnc_symbol","ensembl_gene_id"),values = hgncgenes,mart = mart)
     colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
     
+    #For debugging
     #browser()
     
     #######################
     ## read input gene list
     #######################
     fpkm1 <- fpkm %>% mutate(ENSEMBL=rownames(fpkm)) %>%
-      #filter(rownames(fpkm) %in% as.vector(map.ensembl()$ENSEMBL))
       filter(rownames(fpkm) %in% as.vector(hgnc2ensembl$ENSEMBL))
     fpkm1 <- merge(hgnc2ensembl,fpkm1, by = "ENSEMBL") 
     
@@ -218,8 +220,6 @@ server <- function(input, output) {
     #######################
     clifpkm_clu[,-1] <- apply(clifpkm_clu[,-1], 2, as.numeric)  #convert to a numeric matrix
     summary(clifpkm_clu[,-1])
-    #K-Means Cluster Analysis
-    #library(fpc)
     fit1 <- kmeans(scale(clifpkm_clu[,-1]), 2) # 2 cluster solution
     clifpkm_clu1 <- clifpkm_clu %>% mutate(cluster1 = fit1$cluster)
     mydata <- left_join(clifpkm[,c("bcr_patient_barcode","survtime","stat")], clifpkm_clu1) 
@@ -227,6 +227,7 @@ server <- function(input, output) {
     #######################
     ## output
     #######################
+    # Svaing to a file
     #pdf("PRAD_PFI_KICSTOR.pdf",  width = 5, height = 4, onefile=FALSE)
     #browser()
     #surv_object <- Surv(time = mydata$survtime, event = mydata$stat)
@@ -239,12 +240,11 @@ server <- function(input, output) {
                legend.labs=c("Cluster1", "Cluster2"), legend.title="KICSTOR complex",legend = c(0.25,0.25),
                font.legend = c(14, "plain", "black"), palette=c("orchid2","dodgerblue2"),
                xlab="Days",ylab="Probability of Progression-free\n Survival")
+    
+    # sometimes there is need to print ggsurvplot explicitly and was trying out if return would work.
     #return(survivalplot)
     #req(subset_dataset())
-    #string_db <- STRINGdb$new()
-    #mapped_genes <- string_db$map(subset_dataset(),"genes",removeUnmappedRows = TRUE)
-    #hits_2<-mapped_genes$STRING_id
-    #string_db$plot_network(hits_2)
+    
     
   })
   
