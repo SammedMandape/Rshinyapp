@@ -1,5 +1,8 @@
+## Rshiny app to perform data analysis and visualization
 ## Author: @Sammed Mandape, 2019
+## smandape@email.arizona.edu
 ## PFI survival analysis code: @Shu Cheng, 2019
+## Jan 2019
 
 library(biomaRt)
 
@@ -17,15 +20,29 @@ library(survival)
 library(survminer)
 
 sidebar <- dashboardSidebar(
-  sidebarMenu(
-    menuItem("Summary", tabName = "summary"),
-    menuItem("Analysis", tabName = "analysis")
+  sidebarMenu(id = "sidebarid", #id important for updateTabItems
+    menuItem("Home", tabName = "home"
+             #, icon = icon("home")
+             ),
+    menuItem("Data", tabName = "data"),
+    menuItem("TCGA - Analysis", tabName = "analysis")
   )
 )
 
 body <- dashboardBody(
   tabItems(
-    tabItem(tabName = "summary",
+    tabItem(tabName = "home",
+            fluidRow(
+              box(
+                width = 12, tags$h2(tags$b("CDAT: Cancer Data Analysis Toolkit")), 
+                tags$br(),
+                tags$br(),
+                tags$p("This tool can be used to perform sruvival analysis, plot biological network, and
+                       do pathway enrichment analysis.")
+              )
+            )        
+    ),
+    tabItem(tabName = "data",
             fluidRow(
               box(
                 title = "Studies", width = 12, status = "danger", solidHeader = TRUE,
@@ -47,7 +64,7 @@ body <- dashboardBody(
     # Text Area Input for gene list
     tabItem(tabName = "analysis", 
             tabsetPanel(type = "tabs",
-                        tabPanel("Plots",
+                        tabPanel("Analysis",
                           fluidRow(
                             box(
                               title = "Input gene list here", status = "warning", width = 6, textAreaInput("title1","",value = "", width = '100%',rows=5),
@@ -55,31 +72,62 @@ body <- dashboardBody(
                             )
                           ),
                           fluidRow(
+                            # tabBox(
+                            #   #title = "Plots",
+                            #   width = 6,
+                            #   tabPanel(title = "Heat map", status = "warning", width = 6, plotOutput("heatmap")),
+                            #   tabPanel(title = "Progression Free Survival", status = "warning", width = 6, plotOutput("survivalplot")),
+                            #   tabPanel(title = "String DB network", status = "warning", width = 6, plotOutput("stringplot"))
+                            #   
+                            # )
                             box(
-                              title = "Stirng DB network", status = "warning", width = 6, plotOutput("stringplot")
+                              title = "Stirng DB network", status = "warning", width = 4, plotOutput("stringplot")
                             ),
                             box(
-                              title = "Survival plot", status = "warning", width = 6, plotOutput("survivalplot")
+                              title = "Survival plot", status = "warning", width = 4, plotOutput("survivalplot")
+                            ),
+                            box(
+                              title = "Heat map", status = "warning", width = 4, plotOutput("heatmap")
                             )
                           )
-                        ),
-                        tabPanel("Heat map")
+                        )
+                        #tabPanel("Heat map")
             )
     )
   )
 )
 
+title <- tags$a(href='https://cancercenter.arizona.edu/researchers/shared-resources/bioinformatics',tags$img(src="blocka-logo.png", height = '40', width = '40'), tags$b('CDAT', style="color:black"))
+#title <- tags$img(src="blocka-logo.png", height = '40', width = '40')
+
 # User interface --
 ui <- dashboardPage(
-  dashboardHeader(title = "Cancer research updates", titleWidth = 300),
+  dashboardHeader(title = title,
+                  tags$li(class = "dropdown", actionButton("home1","", icon=icon("home"))
+                    )
+                  # dropdownMenu(type = "messages",
+                  #              messageItem(
+                  #                from = "Sales Dept",
+                  #                message = "Sales are steady this month."
+                  #              ))
+                  #,titleWidth = 300
+                  ),
   sidebar,
   body
 )
 
 # Server logic
-server <- function(input, output) {
+server <- function(input, output, session) {
   #######################
-  ## Summary sidebarpanel
+  ## Observe event to go back to home
+  ######################
+  observeEvent(input$home1, {
+    updateTabItems(session, "sidebarid", "home")
+  })
+  
+  
+  #######################
+  ## Data menuItem
   #######################
   pcdata <- read.csv("./data/ProstateCancerInput_Final.txt", sep = "\t", encoding = 'UTF-8')
   colnames(pcdata)[1] <- ''
@@ -114,7 +162,7 @@ server <- function(input, output) {
   
   
   #######################
-  ## Analysis sidebarPanel
+  ## Analysis menuItem
   #######################
   
   #######################
@@ -124,6 +172,7 @@ server <- function(input, output) {
   subset_dataset <- eventReactive(input$submit,
                                   {data.frame(genes = unlist(strsplit(input$title1,split='[\r\n]')))
                                   })
+  
   string_db <- STRINGdb$new(version="10", species=9606, input_directory="./")
   output$stringplot <- renderPlot({
     req(subset_dataset())
@@ -131,7 +180,8 @@ server <- function(input, output) {
     #string_db <- STRINGdb$new()
     mapped_genes <- string_db$map(subset_dataset(),"genes",removeUnmappedRows = TRUE)
     hits_2<-mapped_genes$STRING_id
-    string_db$plot_network(hits_2)})
+    string_db$plot_network(hits_2)
+    })
   
   
   
@@ -173,20 +223,27 @@ server <- function(input, output) {
     ##read a large table for gene expression FPKM:
     #######################
     
-    tab3rows <- read.table("Prostate_FPKM", header = TRUE, nrows = 3)
+    tab3rows <- read.table("Prostate_FPKM", header = TRUE, nrows = 2)
+    #browser()
     classes <- sapply(tab3rows, class)
     fpkm <- read.table("Prostate_FPKM", header = TRUE, row.names=1, colClasses = classes,comment.char = "")
     
     #######################
     ## Biomart id conversion Gene symbol (hgnc) -> Ensembl gene ids
     #######################
-    mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
-    hgncgenes <- subset_dataset()$genes
-    hgnc2ensembl <- getBM(filters = "hgnc_symbol",attributes = c("hgnc_symbol","ensembl_gene_id"),values = hgncgenes,mart = mart)
-    colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
+    # mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
+    # hgncgenes <- subset_dataset()$genes
+    # hgnc2ensembl <- getBM(filters = "hgnc_symbol",attributes = c("hgnc_symbol","ensembl_gene_id"),values = hgncgenes,mart = mart)
+    # colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
     
-    #For debugging
-    #browser()
+    #######################
+    ## Local id conversion Gene symbol (hgnc) -> Ensembl gene ids
+    #######################
+    mart <- read.delim('Ensembl2GeneSymbol.txt', header = TRUE, sep = "\t")
+    hgnc2ensembl <- merge(mart, subset_dataset(), by = 'genes')
+    colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
+    # ## For debugging
+    # browser()
     
     #######################
     ## read input gene list
@@ -237,7 +294,8 @@ server <- function(input, output) {
     
     ggsurvplot(fitX, data = mydata, 
                pval = TRUE, pval.coord=c(3000,0.25), pval.size = 6, 
-               legend.labs=c("Cluster1", "Cluster2"), legend.title="KICSTOR complex",legend = c(0.25,0.25),
+               legend.labs=c("Cluster1", "Cluster2"), 
+               #legend.title="KICSTOR complex",legend = c(0.25,0.25),
                font.legend = c(14, "plain", "black"), palette=c("orchid2","dodgerblue2"),
                xlab="Days",ylab="Probability of Progression-free\n Survival")
     
