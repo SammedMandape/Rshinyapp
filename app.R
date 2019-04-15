@@ -226,11 +226,17 @@ server <- function(input, output, session) {
     tab3rows <- read.table("Prostate_FPKM", header = TRUE, nrows = 2)
     #browser()
     classes <- sapply(tab3rows, class)
-    fpkm <- read.table("Prostate_FPKM", header = TRUE, row.names=1, colClasses = classes,comment.char = "")
+    
+    ## UNCOMMENT THIS - NEW
+    fpkm <- read.table("Prostate_FPKM_Ensembl2GeneSymbol_unique", header = TRUE, row.names= NULL, colClasses = classes,comment.char = "")
+    
+    ## COMMENT THIS - OLD
+    #fpkm <- read.table("Prostate_FPKM", header = TRUE, row.names=1, colClasses = classes,comment.char = "")
     
     #######################
     ## Biomart id conversion Gene symbol (hgnc) -> Ensembl gene ids
     #######################
+    ## COMMENT THIS -OLD
     # mart <- useDataset("hsapiens_gene_ensembl", useMart("ensembl"))
     # hgncgenes <- subset_dataset()$genes
     # hgnc2ensembl <- getBM(filters = "hgnc_symbol",attributes = c("hgnc_symbol","ensembl_gene_id"),values = hgncgenes,mart = mart)
@@ -239,25 +245,34 @@ server <- function(input, output, session) {
     #######################
     ## Local id conversion Gene symbol (hgnc) -> Ensembl gene ids
     #######################
-    mart <- read.delim('Ensembl2GeneSymbol.txt', header = TRUE, sep = "\t")
-    hgnc2ensembl <- merge(mart, subset_dataset(), by = 'genes')
-    colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
+    # mart <- read.delim('Ensembl2GeneSymbol.txt', header = TRUE, sep = "\t")
+    # hgnc2ensembl <- merge(mart, subset_dataset(), by = 'genes')
+    # colnames(hgnc2ensembl)<-c('SYMBOL','ENSEMBL')
     # ## For debugging
-    # browser()
+    #browser()
     
     #######################
     ## read input gene list
     #######################
-    fpkm1 <- fpkm %>% mutate(ENSEMBL=rownames(fpkm)) %>%
-      filter(rownames(fpkm) %in% as.vector(hgnc2ensembl$ENSEMBL))
-    fpkm1 <- merge(hgnc2ensembl,fpkm1, by = "ENSEMBL") 
+    ## COMMENT THIS -OLD
+    # fpkm1 <- fpkm %>% mutate(ENSEMBL=rownames(fpkm)) %>%
+    #   filter(rownames(fpkm) %in% as.vector(hgnc2ensembl$ENSEMBL))
+    # fpkm1 <- merge(hgnc2ensembl,fpkm1, by = "ENSEMBL")
     
+    ## UNCOMMENT THIS - NEW
+    fpkm1 <- fpkm %>% filter(fpkm[,1] %in% as.vector(subset_dataset()$genes)) #after keeping just the tumor samples, the code should start at this line.
+    fpkm1 <- merge(subset_dataset(),fpkm1, by.x = "genes", by.y = 'hgnc_symbol') # this will do same as above line when read the modifide input file.
+    
+    #browser()
+    
+    ## COMMENT THIS - OLD
     ## Keep gene symbols only
-    fpkm1 <- fpkm1[,-1]
+    #fpkm1 <- fpkm1[,-1]
     
     colnames(fpkm1) <- substr(colnames(fpkm1), 1, 16)
     fpkmT <- fpkm1[,grepl("01A$", colnames(fpkm1))] ##Tumor samples only
-    rownames(fpkmT) <- fpkm1$SYMBOL
+    rownames(fpkmT) <- fpkm1$genes #### UNCOMMENT THIS - NEW
+    #rownames(fpkmT) <- fpkm1$SYMBOL ## ## COMMENT THIS -OLD
     colnames(fpkmT) <- gsub('\\.', '-', colnames(fpkmT)) ##same bar code as cli2 
     
     colnames(fpkmT) <- substr(colnames(fpkmT), 1, 12 ) ##1077
@@ -278,6 +293,7 @@ server <- function(input, output, session) {
     clifpkm_clu[,-1] <- apply(clifpkm_clu[,-1], 2, as.numeric)  #convert to a numeric matrix
     summary(clifpkm_clu[,-1])
     fit1 <- kmeans(scale(clifpkm_clu[,-1]), 2) # 2 cluster solution
+    browser()
     clifpkm_clu1 <- clifpkm_clu %>% mutate(cluster1 = fit1$cluster)
     mydata <- left_join(clifpkm[,c("bcr_patient_barcode","survtime","stat")], clifpkm_clu1) 
     
